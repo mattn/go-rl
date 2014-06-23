@@ -182,10 +182,6 @@ func readLine(prompt string) (string, error) {
 	cursor := csbi.cursorPosition
 	cursor_x := 0
 
-	if cursor.x > 0 {
-		fmt.Println()
-	}
-
 	rc := make(chan rune)
 	go func() {
 		for {
@@ -220,7 +216,7 @@ loop:
 		}
 		cursor = csbi.cursorPosition
 		cursor.x = 0
-		r1, _, err = procFillConsoleOutputCharacter.Call(out, uintptr(' '), uintptr(79), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+		r1, _, err = procFillConsoleOutputCharacter.Call(out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
 		if r1 == 0 {
 			return "", err
 		}
