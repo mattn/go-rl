@@ -237,7 +237,6 @@ loop:
 
 		select {
 		case r := <-rc:
-			println(r)
 			switch r {
 			case 0:
 			case 1: // CTRL-A
@@ -280,7 +279,6 @@ loop:
 				tmp = append(tmp, r)
 				input = append(tmp, input[cursor_x:len(input)]...)
 				cursor_x++
-				cursor.x += short(runewidth.RuneWidth(r))
 			}
 		}
 	}
