@@ -9,6 +9,7 @@
 
 ## TODO
 
+* redraw characters that have modified 
 * hide overflowed characters
 * history
 * completion
