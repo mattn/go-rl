@@ -25,16 +25,16 @@ type ctx struct {
 func (c *ctx) readRunes() ([]rune, error) {
 	var buf [16]byte
 	n, err := syscall.Read(int(c.in), buf[:])
-	if err != nil || c.ch == nil {
-		break
+	if err != nil {
+		return nil, err
 	}
 	if n == 0 {
-		continue
+		return []rune{}, nil
 	}
 	if buf[n-1] == '\n' {
 		n--
 	}
-	return []rune(string(buf[:n])) {
+	return []rune(string(buf[:n])), nil
 }
 
 func NewRl(prompt string) (*ctx, error) {
