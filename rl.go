@@ -51,7 +51,7 @@ loop:
 				if c.cursor_x < len(c.input) {
 					c.cursor_x++
 				}
-			case 8: // BS
+			case 8, 0x7F: // BS
 				if c.cursor_x > 0 {
 					c.input = append(c.input[0:c.cursor_x-1], c.input[c.cursor_x:len(c.input)]...)
 					c.cursor_x--

@@ -72,7 +72,7 @@ func (c *ctx) tearDown() {
 func (c *ctx) redraw(dirty bool) error {
 	var buf bytes.Buffer
 
-	buf.WriteString("\x1b[>5h")
+	//buf.WriteString("\x1b[>5h")
 
 	ccol, crow, col, row := -1, 0, 0, 0
 	buf.WriteString("\x1b[0G")
@@ -122,7 +122,7 @@ func (c *ctx) redraw(dirty bool) error {
 	}
 	buf.WriteString(fmt.Sprintf("\x1b[%dG", ccol + 1))
 
-	buf.WriteString("\x1b[>5l")
+	//buf.WriteString("\x1b[>5l")
 	io.Copy(os.Stdout, &buf)
 	os.Stdout.Sync()
 
