@@ -20,6 +20,8 @@ type ctx struct {
 	cursor_x     int
 	prompt       string
 	old_cursor_x int
+	old_row     int
+	old_crow     int
 	size         int
 }
 
@@ -72,62 +74,61 @@ func (c *ctx) redraw(dirty bool) error {
 
 	buf.WriteString("\x1b[>5h")
 
-	ccols, crows, cols, rows := 0, 0, 0, 0
-	width := runewidth.StringWidth(c.prompt + string(c.input[:c.old_cursor_x]))
+	ccol, crow, col, row := -1, 0, 0, 0
+	buf.WriteString("\x1b[0G")
 	if dirty {
-		buf.WriteString("\x1b[0G")
-		buf.WriteString("\x1b[2K")
-		for i := 0; i <  width / c.size; i++ {
-			buf.WriteString("\x1b[2K\x1b[A")
-		}
-		plen := len([]rune(c.prompt))
-		for i, r := range []rune(c.prompt + string(c.input)) {
-			if i == plen + c.cursor_x {
-				ccols = cols
-				crows = rows
-			}
-			rw := runewidth.RuneWidth(r)
-			if cols + rw > c.size {
-				cols = 0
-				rows++
-				buf.WriteString("\n")
-			}
-			buf.WriteString(string(r))
-			cols += rw
-		}
-	} else {
-		buf.WriteString("\x1b[0G")
-		for i := 0; i <  width / c.size; i++ {
-			buf.WriteString("\x1b[A")
-		}
-		plen := len([]rune(c.prompt))
-		for i, r := range []rune(c.prompt + string(c.input)) {
-			if i == plen + c.cursor_x {
-				ccols = cols
-				crows = rows
-			}
-			rw := runewidth.RuneWidth(r)
-			if cols + rw > c.size {
-				cols -= c.size
-				rows++
-			}
-			cols += rw
-		}
+		buf.WriteString("\x1b[0K")
 	}
-	if ccols == 0 {
-		ccols = cols
-		crows = rows
+	for i := 0; i <  c.old_row - c.old_crow; i++ {
+		buf.WriteString("\x1b[B")
 	}
-	for i := 0; i <  crows - rows; i++ {
+	for i := 0; i <  c.old_row; i++ {
+		if dirty {
+			buf.WriteString("\x1b[2K")
+		}
 		buf.WriteString("\x1b[A")
 	}
-	buf.WriteString(fmt.Sprintf("\x1b[%dG", ccols + 1))
+	plen := len([]rune(c.prompt))
+	for i, r := range []rune(c.prompt + string(c.input)) {
+		if i == plen + c.cursor_x {
+			ccol = col
+			crow = row
+		}
+		rw := runewidth.RuneWidth(r)
+		if col + rw > c.size {
+			col = 0
+			row++
+			if dirty {
+				buf.WriteString("\n\r\x1b[0K")
+			}
+		}
+		if dirty {
+			buf.WriteString(string(r))
+		}
+		col += rw
+	}
+	if dirty {
+		buf.WriteString("\x1b[0G")
+		for i := 0; i <  row; i++ {
+			buf.WriteString("\x1b[A")
+		}
+	}
+	if ccol == -1 {
+		ccol = col
+		crow = row
+	}
+	for i := 0; i <  crow; i++ {
+		buf.WriteString("\x1b[B")
+	}
+	buf.WriteString(fmt.Sprintf("\x1b[%dG", ccol + 1))
 
 	buf.WriteString("\x1b[>5l")
 	io.Copy(os.Stdout, &buf)
 	os.Stdout.Sync()
 
 	c.old_cursor_x = c.cursor_x
+	c.old_row = row
+	c.old_crow = crow
 
 	return nil
 }
