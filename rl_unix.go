@@ -3,8 +3,10 @@
 package rl
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/mattn/go-runewidth"
+	"io"
 	"os"
 	"syscall"
 	"unsafe"
@@ -73,15 +75,17 @@ func (c *ctx) tearDown() {
 }
 
 func (c *ctx) redraw(dirty bool) error {
-	os.Stdout.WriteString("\x1b[>5h")
-	os.Stdout.WriteString("\r")
+	var buf bytes.Buffer
+	buf.WriteString("\x1b[>5h")
+	buf.WriteString("\r")
 	if dirty {
-		os.Stdout.WriteString("\x1b[2K")
-		os.Stdout.WriteString(c.prompt + string(c.input))
-		os.Stdout.WriteString("\r")
+		buf.WriteString("\x1b[2K")
+		buf.WriteString(c.prompt + string(c.input))
+		buf.WriteString("\r")
 	}
 	x := runewidth.StringWidth(c.prompt) + runewidth.StringWidth(string(c.input[:c.cursor_x]))
-	os.Stdout.WriteString(fmt.Sprintf("\x1b[%dC", x))
-	os.Stdout.WriteString("\x1b[>5l")
-	return nil
+	buf.WriteString(fmt.Sprintf("\x1b[%dC", x))
+	buf.WriteString("\x1b[>5l")
+	io.Copy(os.Stdout, &buf)
+	return os.Stdout.Sync()
 }
