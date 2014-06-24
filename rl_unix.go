@@ -13,13 +13,14 @@ import (
 )
 
 type ctx struct {
-	in       uintptr
-	out      uintptr
-	st       syscall.Termios
-	input    []rune
-	cursor_x int
-	prompt   string
-	size     int
+	in           uintptr
+	out          uintptr
+	st           syscall.Termios
+	input        []rune
+	cursor_x     int
+	prompt       string
+	old_cursor_x int
+	size         int
 }
 
 func (c *ctx) readRunes() ([]rune, error) {
@@ -58,6 +59,7 @@ func NewRl(prompt string) (*ctx, error) {
 	c.prompt = prompt
 	c.input = []rune{}
 
+	c.size = 80
 	return c, nil
 }
 
@@ -67,17 +69,65 @@ func (c *ctx) tearDown() {
 
 func (c *ctx) redraw(dirty bool) error {
 	var buf bytes.Buffer
+
 	buf.WriteString("\x1b[>5h")
-	buf.WriteString("\r")
+
+	ccols, crows, cols, rows := 0, 0, 0, 0
+	width := runewidth.StringWidth(c.prompt + string(c.input[:c.old_cursor_x]))
 	if dirty {
+		buf.WriteString("\x1b[0G")
 		buf.WriteString("\x1b[2K")
-		buf.WriteString(c.prompt + string(c.input))
-		buf.WriteString("\r")
+		for i := 0; i <  width / c.size; i++ {
+			buf.WriteString("\x1b[2K\x1b[A")
+		}
+		plen := len([]rune(c.prompt))
+		for i, r := range []rune(c.prompt + string(c.input)) {
+			if i == plen + c.cursor_x {
+				ccols = cols
+				crows = rows
+			}
+			rw := runewidth.RuneWidth(r)
+			if cols + rw > c.size {
+				cols = 0
+				rows++
+				buf.WriteString("\n")
+			}
+			buf.WriteString(string(r))
+			cols += rw
+		}
+	} else {
+		buf.WriteString("\x1b[0G")
+		for i := 0; i <  width / c.size; i++ {
+			buf.WriteString("\x1b[A")
+		}
+		plen := len([]rune(c.prompt))
+		for i, r := range []rune(c.prompt + string(c.input)) {
+			if i == plen + c.cursor_x {
+				ccols = cols
+				crows = rows
+			}
+			rw := runewidth.RuneWidth(r)
+			if cols + rw > c.size {
+				cols -= c.size
+				rows++
+			}
+			cols += rw
+		}
 	}
-	x := runewidth.StringWidth(c.prompt) + runewidth.StringWidth(string(c.input[:c.cursor_x]))
-	buf.WriteString(fmt.Sprintf("\x1b[%dC", x))
+	if ccols == 0 {
+		ccols = cols
+		crows = rows
+	}
+	for i := 0; i <  crows - rows; i++ {
+		buf.WriteString("\x1b[A")
+	}
+	buf.WriteString(fmt.Sprintf("\x1b[%dG", ccols + 1))
+
 	buf.WriteString("\x1b[>5l")
 	io.Copy(os.Stdout, &buf)
 	os.Stdout.Sync()
+
+	c.old_cursor_x = c.cursor_x
+
 	return nil
 }
