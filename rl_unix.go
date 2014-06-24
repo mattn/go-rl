@@ -18,6 +18,7 @@ type ctx struct {
 	cursor_x int
 	prompt   string
 	ch       chan rune
+	size     int
 }
 
 func NewRl(prompt string) (*ctx, error) {
@@ -42,7 +43,7 @@ func NewRl(prompt string) (*ctx, error) {
 		for {
 			var buf [16]byte
 			n, err := syscall.Read(int(c.in), buf[:])
-			if err != nil {
+			if err != nil || c.ch == nil {
 				break
 			}
 			if n == 0 {

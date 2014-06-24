@@ -14,8 +14,8 @@ func ReadLine(prompt string) (string, error) {
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, os.Interrupt)
-	go func(){
-	    <-sc
+	go func() {
+		<-sc
 		close(c.ch)
 		c.ch = nil
 	}()
