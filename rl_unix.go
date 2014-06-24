@@ -87,5 +87,6 @@ func (c *ctx) redraw(dirty bool) error {
 	buf.WriteString(fmt.Sprintf("\x1b[%dC", x))
 	buf.WriteString("\x1b[>5l")
 	io.Copy(os.Stdout, &buf)
-	return os.Stdout.Sync()
+	os.Stdout.Sync()
+	return nil
 }
