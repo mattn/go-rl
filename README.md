@@ -9,6 +9,7 @@
 
 ## TODO
 
+* wrap line
 * redraw characters that have modified 
 * hide overflowed characters
 * history
