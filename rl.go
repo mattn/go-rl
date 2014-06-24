@@ -16,8 +16,6 @@ func ReadLine(prompt string) (string, error) {
 	signal.Notify(sc, os.Interrupt)
 	go func() {
 		<-sc
-		close(c.ch)
-		c.ch = nil
 	}()
 
 	dirty := true
@@ -29,11 +27,11 @@ loop:
 		}
 		dirty = false
 
-		select {
-		case r, ok := <-c.ch:
-			if !ok {
-				break loop
-			}
+		rs, err := c.readRunes()
+		if err != nil {
+			break
+		}
+		for _, r := range rs {
 			switch r {
 			case 0:
 			case 1: // CTRL-A

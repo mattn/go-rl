@@ -19,8 +19,22 @@ type ctx struct {
 	input    []rune
 	cursor_x int
 	prompt   string
-	ch       chan rune
 	size     int
+}
+
+func (c *ctx) readRunes() ([]rune, error) {
+	var buf [16]byte
+	n, err := syscall.Read(int(c.in), buf[:])
+	if err != nil || c.ch == nil {
+		break
+	}
+	if n == 0 {
+		continue
+	}
+	if buf[n-1] == '\n' {
+		n--
+	}
+	return []rune(string(buf[:n])) {
 }
 
 func NewRl(prompt string) (*ctx, error) {
@@ -41,37 +55,14 @@ func NewRl(prompt string) (*ctx, error) {
 		return nil, err
 	}
 
-	go func() {
-		for {
-			var buf [16]byte
-			n, err := syscall.Read(int(c.in), buf[:])
-			if err != nil || c.ch == nil {
-				break
-			}
-			if n == 0 {
-				continue
-			}
-			if buf[n-1] == '\n' {
-				n--
-			}
-			for _, r := range []rune(string(buf[:n])) {
-				c.ch <- r
-			}
-		}
-	}()
-
 	c.prompt = prompt
 	c.input = []rune{}
-	c.ch = make(chan rune)
 
 	return c, nil
 }
 
 func (c *ctx) tearDown() {
 	syscall.Syscall6(syscall.SYS_IOCTL, c.in, uintptr(TCSETS), uintptr(unsafe.Pointer(&c.st)), 0, 0, 0)
-	if c.ch != nil {
-		close(c.ch)
-	}
 }
 
 func (c *ctx) redraw(dirty bool) error {

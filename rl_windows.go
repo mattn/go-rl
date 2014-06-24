@@ -144,7 +144,31 @@ type ctx struct {
 	input    []rune
 	cursor_x int
 	prompt   string
-	ch       chan rune
+	pos      coord
+}
+
+func (c *ctx) readRunes() ([]rune, error) {
+	var ir inputRecord
+	err := readConsoleInput(c.in, &ir)
+	if err != nil {
+		return nil, err
+	}
+
+	switch ir.eventType {
+	case keyEvent:
+		kr := (*keyEventRecord)(unsafe.Pointer(&ir.event))
+		if kr.keyDown != 0 {
+			return []rune{rune(kr.unicodeChar)}, nil
+		}
+	case windowBufferSizeEvent:
+		sr := *(*windowBufferSizeRecord)(unsafe.Pointer(&ir.event))
+		println(&sr)
+	case mouseEvent:
+		mr := *(*mouseEventRecord)(unsafe.Pointer(&ir.event))
+		println(&mr)
+	}
+
+	return nil, nil
 }
 
 func NewRl(prompt string) (*ctx, error) {
@@ -179,60 +203,41 @@ func NewRl(prompt string) (*ctx, error) {
 		return nil, err
 	}
 
-	go func() {
-		for {
-			var ir inputRecord
-			err := readConsoleInput(c.in, &ir)
-			if err != nil {
-				break
-			}
+	var csbi consoleScreenBufferInfo
 
-			switch ir.eventType {
-			case keyEvent:
-				kr := (*keyEventRecord)(unsafe.Pointer(&ir.event))
-				if kr.keyDown != 0 {
-					c.ch <- rune(kr.unicodeChar)
-				}
-			case windowBufferSizeEvent:
-				sr := *(*windowBufferSizeRecord)(unsafe.Pointer(&ir.event))
-				println(&sr)
-			case mouseEvent:
-				mr := *(*mouseEventRecord)(unsafe.Pointer(&ir.event))
-				println(&mr)
-			}
-		}
-	}()
-
+	r1, _, err = procGetConsoleScreenBufferInfo.Call(c.out, uintptr(unsafe.Pointer(&csbi)))
+	if r1 == 0 {
+		return nil, err
+	}
+	c.pos = csbi.cursorPosition
 	c.prompt = prompt
 	c.input = []rune{}
-	c.ch = make(chan rune)
 
 	return c, nil
 }
 
 func (c *ctx) tearDown() {
 	procSetConsoleMode.Call(c.in, uintptr(c.st))
-	if c.ch != nil {
-		close(c.ch)
-	}
 }
 
 func (c *ctx) redraw(dirty bool) error {
 	var csbi consoleScreenBufferInfo
-	var w uint32
 
+	var cursor coord
+	cursor.x = c.pos.x
+	cursor.y = c.pos.y
 	r1, _, err := procGetConsoleScreenBufferInfo.Call(c.out, uintptr(unsafe.Pointer(&csbi)))
 	if r1 == 0 {
 		return err
 	}
-
-	cursor := csbi.cursorPosition
 	if dirty {
+		var w uint32
 		cursor.x = 0
 		r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
 		if r1 == 0 {
 			return err
 		}
+		cursor.x %= csbi.size.x
 		r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 		if r1 == 0 {
 			return err
@@ -240,6 +245,8 @@ func (c *ctx) redraw(dirty bool) error {
 		writeConsole(c.out, []rune(c.prompt+string(c.input)))
 	}
 	cursor.x = short(runewidth.StringWidth(c.prompt)) + short(runewidth.StringWidth(string(c.input[:c.cursor_x])))
+	cursor.y += cursor.x / csbi.size.y
+	cursor.x %= csbi.size.x
 	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 	if r1 == 0 {
 		return err
