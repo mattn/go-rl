@@ -40,6 +40,8 @@ loop:
 				if c.cursor_x > 0 {
 					c.cursor_x--
 				}
+			case 3: // BREAK
+				return "", nil
 			case 5: // CTRL-E
 				c.cursor_x = len(c.input)
 			case 6: // CTRL-F
