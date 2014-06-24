@@ -5,6 +5,7 @@
 * Linux
 * Windows
 * FreeBSD
+* Mac OS X
 
 ## TODO
 
