@@ -212,6 +212,9 @@ func NewRl(prompt string) (*ctx, error) {
 
 func (c *ctx) tearDown() {
 	procSetConsoleMode.Call(c.in, uintptr(c.st))
+	if c.ch != nil {
+		close(c.ch)
+	}
 }
 
 func (c *ctx) redraw() error {

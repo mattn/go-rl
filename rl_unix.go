@@ -67,6 +67,9 @@ func NewRl(prompt string) (*ctx, error) {
 
 func (c *ctx) tearDown() {
 	syscall.Syscall6(syscall.SYS_IOCTL, c.in, uintptr(syscall.TCSETS), uintptr(unsafe.Pointer(&c.st)), 0, 0, 0)
+	if c.ch != nil {
+		close(c.ch)
+	}
 }
 
 func (c *ctx) redraw() error {

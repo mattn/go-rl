@@ -2,6 +2,7 @@ package rl
 
 import (
 	"os"
+	"os/signal"
 )
 
 func ReadLine(prompt string) (string, error) {
@@ -11,6 +12,14 @@ func ReadLine(prompt string) (string, error) {
 	}
 	defer c.tearDown()
 
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, os.Interrupt)
+	go func(){
+	    <-sc
+		close(c.ch)
+		c.ch = nil
+	}()
+
 loop:
 	for {
 		err = c.redraw()
@@ -19,7 +28,10 @@ loop:
 		}
 
 		select {
-		case r := <-c.ch:
+		case r, ok := <-c.ch:
+			if !ok {
+				break loop
+			}
 			switch r {
 			case 0:
 			case 1: // CTRL-A
