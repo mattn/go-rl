@@ -73,15 +73,15 @@ func (c *ctx) tearDown() {
 }
 
 func (c *ctx) redraw(dirty bool) error {
+	os.Stdout.WriteString("\x1b[>5h")
+	os.Stdout.WriteString("\r")
 	if dirty {
-		os.Stdout.WriteString("\r")
 		os.Stdout.WriteString("\x1b[2K")
 		os.Stdout.WriteString(c.prompt + string(c.input))
-		os.Stdout.WriteString("\r")
-	} else {
 		os.Stdout.WriteString("\r")
 	}
 	x := runewidth.StringWidth(c.prompt) + runewidth.StringWidth(string(c.input[:c.cursor_x]))
 	os.Stdout.WriteString(fmt.Sprintf("\x1b[%dC", x))
+	os.Stdout.WriteString("\x1b[>5l")
 	return nil
 }
