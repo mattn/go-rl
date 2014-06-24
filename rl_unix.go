@@ -34,7 +34,6 @@ func NewRl(prompt string) (*ctx, error) {
 
 	st.Iflag &^= syscall.ISTRIP | syscall.INLCR | syscall.ICRNL | syscall.IGNCR | syscall.IXON | syscall.IXOFF
 	st.Lflag &^= syscall.ECHO | syscall.ICANON | syscall.ISIG
-	//st.Lflag &^= syscall.ECHO
 	if _, _, err := syscall.Syscall6(syscall.SYS_IOCTL, c.in, uintptr(TCSETS), uintptr(unsafe.Pointer(&st)), 0, 0, 0); err != 0 {
 		return nil, err
 	}
@@ -72,11 +71,15 @@ func (c *ctx) tearDown() {
 	}
 }
 
-func (c *ctx) redraw() error {
-	os.Stdout.WriteString("\r")
-	os.Stdout.WriteString("\x1b[2K")
-	os.Stdout.WriteString(c.prompt + string(c.input))
-	os.Stdout.WriteString("\r")
+func (c *ctx) redraw(dirty bool) error {
+	if dirty {
+		os.Stdout.WriteString("\r")
+		os.Stdout.WriteString("\x1b[2K")
+		os.Stdout.WriteString(c.prompt + string(c.input))
+		os.Stdout.WriteString("\r")
+	} else {
+		os.Stdout.WriteString("\r")
+	}
 	x := runewidth.StringWidth(c.prompt) + runewidth.StringWidth(string(c.input[:c.cursor_x]))
 	os.Stdout.WriteString(fmt.Sprintf("\x1b[%dC", x))
 	return nil

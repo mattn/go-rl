@@ -217,7 +217,7 @@ func (c *ctx) tearDown() {
 	}
 }
 
-func (c *ctx) redraw() error {
+func (c *ctx) redraw(dirty bool) error {
 	var csbi consoleScreenBufferInfo
 	var w uint32
 
@@ -225,17 +225,20 @@ func (c *ctx) redraw() error {
 	if r1 == 0 {
 		return err
 	}
+
 	cursor := csbi.cursorPosition
-	cursor.x = 0
-	r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
-	if r1 == 0 {
-		return err
+	if dirty {
+		cursor.x = 0
+		r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+		if r1 == 0 {
+			return err
+		}
+		r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
+		if r1 == 0 {
+			return err
+		}
+		writeConsole(c.out, []rune(c.prompt+string(c.input)))
 	}
-	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
-	if r1 == 0 {
-		return err
-	}
-	writeConsole(c.out, []rune(c.prompt+string(c.input)))
 	cursor.x = short(runewidth.StringWidth(c.prompt)) + short(runewidth.StringWidth(string(c.input[:c.cursor_x])))
 	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 	if r1 == 0 {
