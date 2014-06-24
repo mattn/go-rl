@@ -230,26 +230,37 @@ func (c *ctx) redraw(dirty bool) error {
 	if r1 == 0 {
 		return err
 	}
+	width := short(runewidth.StringWidth(c.prompt)) + short(runewidth.StringWidth(string(c.input[:c.cursor_x])))
 	if dirty {
 		var w uint32
 		cursor.x = 0
-		r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
-		if r1 == 0 {
-			return err
+		rows := width / short(csbi.size.x)
+		for i := short(0); i <= rows; i++ {
+			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+			if r1 == 0 {
+				return err
+			}
+			cursor.y++
 		}
-		cursor.x %= csbi.size.x
+		cursor.x = c.pos.x
+		cursor.y = c.pos.y
 		r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 		if r1 == 0 {
 			return err
 		}
 		writeConsole(c.out, []rune(c.prompt+string(c.input)))
+		r1, _, err = procGetConsoleScreenBufferInfo.Call(c.out, uintptr(unsafe.Pointer(&csbi)))
+		if r1 == 0 {
+			return err
+		}
+		c.pos.y = csbi.cursorPosition.y - rows
 	}
-	cursor.x = short(runewidth.StringWidth(c.prompt)) + short(runewidth.StringWidth(string(c.input[:c.cursor_x])))
-	cursor.y += cursor.x / csbi.size.y
+	cursor.x = width
+	cursor.y += cursor.x / csbi.size.x
 	cursor.x %= csbi.size.x
 	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 	if r1 == 0 {
-		return err
+		//return err
 	}
 	return nil
 }

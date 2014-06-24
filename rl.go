@@ -12,15 +12,18 @@ func ReadLine(prompt string) (string, error) {
 	}
 	defer c.tearDown()
 
+	quit := false
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, os.Interrupt)
 	go func() {
 		<-sc
+		c.input = nil
+		quit = true
 	}()
 
 	dirty := true
 loop:
-	for {
+	for !quit {
 		err = c.redraw(dirty)
 		if err != nil {
 			return "", err
