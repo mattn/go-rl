@@ -1,7 +1,6 @@
 package rl
 
 import (
-	"fmt"
 	"github.com/mattn/go-runewidth"
 	"os"
 	"syscall"
@@ -121,6 +120,9 @@ func setStdHandle(stdhandle int32, handle uintptr) error {
 }
 
 func writeConsole(fd uintptr, rs []rune) error {
+	if len(rs) == 0 {
+		return nil
+	}
 	wchars := utf16.Encode(rs)
 	var w uint32
 	return syscall.WriteConsole(syscall.Handle(fd), &wchars[0], uint32(len(wchars)), &w, nil)
@@ -135,58 +137,52 @@ func readConsoleInput(fd uintptr, record *inputRecord) (err error) {
 	return nil
 }
 
-func readLine(prompt string) (string, error) {
-	var in, out uintptr
+type ctx struct {
+	in       uintptr
+	out      uintptr
+	st       uint32
+	input    []rune
+	cursor_x int
+	prompt   string
+	ch       chan rune
+}
 
+func NewRl(prompt string) (*ctx, error) {
+	c := new(ctx)
 	if isTty() {
-		in = getStdHandle(syscall.STD_INPUT_HANDLE)
-		out = getStdHandle(syscall.STD_OUTPUT_HANDLE)
+		c.in = getStdHandle(syscall.STD_INPUT_HANDLE)
+		c.out = getStdHandle(syscall.STD_OUTPUT_HANDLE)
 	} else {
 		conin, err := os.Open("CONIN$")
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		in = conin.Fd()
+		c.in = conin.Fd()
 
 		conout, err := os.Open("CONOUT$")
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		out = conout.Fd()
+		c.out = conout.Fd()
 	}
 
 	var st uint32
-	r1, _, err := procGetConsoleMode.Call(in, uintptr(unsafe.Pointer(&st)))
+	r1, _, err := procGetConsoleMode.Call(c.in, uintptr(unsafe.Pointer(&st)))
 	if r1 == 0 {
-		return "", err
+		return nil, err
 	}
-	old := st
+	c.st = st
 
 	st &^= (enableEchoInput | enableLineInput)
-	r1, _, err = procSetConsoleMode.Call(in, uintptr(st))
+	r1, _, err = procSetConsoleMode.Call(c.in, uintptr(st))
 	if r1 == 0 {
-		return "", err
+		return nil, err
 	}
 
-	defer func() {
-		procSetConsoleMode.Call(in, uintptr(old))
-	}()
-
-	var input []rune
-	var csbi consoleScreenBufferInfo
-
-	r1, _, err = procGetConsoleScreenBufferInfo.Call(out, uintptr(unsafe.Pointer(&csbi)))
-	if r1 == 0 {
-		return "", err
-	}
-	cursor := csbi.cursorPosition
-	cursor_x := 0
-
-	rc := make(chan rune)
 	go func() {
 		for {
 			var ir inputRecord
-			err := readConsoleInput(in, &ir)
+			err := readConsoleInput(c.in, &ir)
 			if err != nil {
 				break
 			}
@@ -195,7 +191,7 @@ func readLine(prompt string) (string, error) {
 			case keyEvent:
 				kr := (*keyEventRecord)(unsafe.Pointer(&ir.event))
 				if kr.keyDown != 0 {
-					rc <- rune(kr.unicodeChar)
+					c.ch <- rune(kr.unicodeChar)
 				}
 			case windowBufferSizeEvent:
 				sr := *(*windowBufferSizeRecord)(unsafe.Pointer(&ir.event))
@@ -207,78 +203,40 @@ func readLine(prompt string) (string, error) {
 		}
 	}()
 
-loop:
-	for {
-		var w uint32
-		r1, _, err = procGetConsoleScreenBufferInfo.Call(out, uintptr(unsafe.Pointer(&csbi)))
-		if r1 == 0 {
-			return "", err
-		}
-		cursor = csbi.cursorPosition
-		cursor.x = 0
-		r1, _, err = procFillConsoleOutputCharacter.Call(out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
-		if r1 == 0 {
-			return "", err
-		}
-		r1, _, err = procSetConsoleCursorPosition.Call(out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
-		if r1 == 0 {
-			return "", err
-		}
-		writeConsole(out, []rune(prompt+string(input)))
-		cursor.x = short(runewidth.StringWidth(prompt)) + short(runewidth.StringWidth(string(input[:cursor_x])))
-		r1, _, err = procSetConsoleCursorPosition.Call(out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
-		if r1 == 0 {
-			return "", err
-		}
+	c.prompt = prompt
+	c.input = []rune{}
+	c.ch = make(chan rune)
 
-		select {
-		case r := <-rc:
-			switch r {
-			case 0:
-			case 1: // CTRL-A
-				cursor_x = 0
-			case 2: // CTRL-B
-				if cursor_x > 0 {
-					cursor_x--
-				}
-			case 5: // CTRL-E
-				cursor_x = len(input)
-			case 6: // CTRL-F
-				if cursor_x < len(input) {
-					cursor_x++
-				}
-			case 8: // BS
-				if cursor_x > 0 {
-					input = append(input[0:cursor_x-1], input[cursor_x:len(input)]...)
-					cursor_x--
-				}
-			case 10: // LF
-				break loop
-			case 11: // CTRL-K
-				input = input[:cursor_x]
-			case 13: // CR
-				break loop
-			case 21: // CTRL-U
-				input = input[cursor_x:]
-				cursor_x = 0
-			case 23: // CTRL-W
-				for i := len(input) - 1; i >= 0; i-- {
-					if i == 0 || input[i] == ' ' || input[i] == '\t' {
-						input = append(input[:i], input[cursor_x:]...)
-						cursor_x = i
-						break
-					}
-				}
-			default:
-				tmp := []rune{}
-				tmp = append(tmp, input[0:cursor_x]...)
-				tmp = append(tmp, r)
-				input = append(tmp, input[cursor_x:len(input)]...)
-				cursor_x++
-			}
-		}
+	return c, nil
+}
+
+func (c *ctx) tearDown() {
+	procSetConsoleMode.Call(c.in, uintptr(c.st))
+}
+
+func (c *ctx) redraw() error {
+	var csbi consoleScreenBufferInfo
+	var w uint32
+
+	r1, _, err := procGetConsoleScreenBufferInfo.Call(c.out, uintptr(unsafe.Pointer(&csbi)))
+	if r1 == 0 {
+		return err
 	}
-	fmt.Println()
-
-	return string(input), nil
+	cursor := csbi.cursorPosition
+	cursor.x = 0
+	r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+	if r1 == 0 {
+		return err
+	}
+	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
+	if r1 == 0 {
+		return err
+	}
+	writeConsole(c.out, []rune(c.prompt+string(c.input)))
+	cursor.x = short(runewidth.StringWidth(c.prompt)) + short(runewidth.StringWidth(string(c.input[:c.cursor_x])))
+	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
+	if r1 == 0 {
+		return err
+	}
+	return nil
 }
