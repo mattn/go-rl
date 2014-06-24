@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"syscall"
+	"unicode"
 	"unsafe"
 )
 
@@ -89,18 +90,20 @@ loop:
 				cursor_x = 0
 			case 23: // CTRL-W
 				for i := len(input) - 1; i >= 0; i-- {
-					if i == 0 || input[i] == ' ' || input[i] == '\t' {
+					if i == 0 || unicode.IsPrint(input[i]) {
 						input = append(input[:i], input[cursor_x:]...)
 						cursor_x = i
 						break
 					}
 				}
 			default:
-				tmp := []rune{}
-				tmp = append(tmp, input[0:cursor_x]...)
-				tmp = append(tmp, r)
-				input = append(tmp, input[cursor_x:len(input)]...)
-				cursor_x++
+				if unicode.IsPrint(r) {
+					tmp := []rune{}
+					tmp = append(tmp, input[0:cursor_x]...)
+					tmp = append(tmp, r)
+					input = append(tmp, input[cursor_x:len(input)]...)
+					cursor_x++
+				}
 			}
 		}
 	}
