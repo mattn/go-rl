@@ -14,4 +14,4 @@
 * hide overflowed characters
 * history
 * completion
-* password inputs
+* ~~password inputs~~
