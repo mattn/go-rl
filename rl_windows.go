@@ -175,7 +175,7 @@ func (c *ctx) readRunes() ([]rune, error) {
 	return nil, nil
 }
 
-func NewRl(prompt string) (*ctx, error) {
+func newCtx(prompt string) (*ctx, error) {
 	c := new(ctx)
 	if isTty() {
 		c.in = getStdHandle(syscall.STD_INPUT_HANDLE)
@@ -226,7 +226,7 @@ func (c *ctx) tearDown() {
 	procSetConsoleMode.Call(c.in, uintptr(c.st))
 }
 
-func (c *ctx) redraw(dirty bool) error {
+func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	var csbi consoleScreenBufferInfo
 
 	var ci consoleCursorInfo
@@ -277,10 +277,19 @@ func (c *ctx) redraw(dirty bool) error {
 		}
 	}
 
+	var rs []rune
+	if passwordChar != 0 {
+		for i := 0; i < len(c.input); i++ {
+			rs = append(rs, passwordChar)
+		}
+	} else {
+		rs = c.input
+	}
+
 	var ccol, crow, col, row int
 	ccol = -1
 	plen := len([]rune(c.prompt))
-	for i, r := range []rune(c.prompt + string(c.input)) {
+	for i, r := range []rune(c.prompt + string(rs)) {
 		if i == plen + c.cursor_x {
 			ccol = col
 			crow = row

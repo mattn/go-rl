@@ -39,7 +39,7 @@ func (c *ctx) readRunes() ([]rune, error) {
 	return []rune(string(buf[:n])), nil
 }
 
-func NewRl(prompt string) (*ctx, error) {
+func newCtx(prompt string) (*ctx, error) {
 	c := new(ctx)
 
 	c.in = os.Stdin.Fd()
@@ -68,7 +68,7 @@ func (c *ctx) tearDown() {
 	syscall.Syscall6(syscall.SYS_IOCTL, c.in, uintptr(TCSETS), uintptr(unsafe.Pointer(&c.st)), 0, 0, 0)
 }
 
-func (c *ctx) redraw(dirty bool) error {
+func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	var buf bytes.Buffer
 
 	//buf.WriteString("\x1b[>5h")
@@ -87,9 +87,18 @@ func (c *ctx) redraw(dirty bool) error {
 		buf.WriteString("\x1b[A")
 	}
 
+	var rs []rune
+	if passwordChar != 0 {
+		for i := 0; i < len(c.input); i++ {
+			rs = append(rs, passwordChar)
+		}
+	} else {
+		rs = c.input
+	}
+
 	ccol, crow, col, row := -1, 0, 0, 0
 	plen := len([]rune(c.prompt))
-	for i, r := range []rune(c.prompt + string(c.input)) {
+	for i, r := range []rune(c.prompt + string(rs)) {
 		if i == plen + c.cursor_x {
 			ccol = col
 			crow = row

@@ -5,8 +5,20 @@ import (
 	"os/signal"
 )
 
-func ReadLine(prompt string) (string, error) {
-	c, err := NewRl(prompt)
+type Rl struct {
+	Prompt string
+	PasswordRune rune
+}
+
+func NewRl() *Rl {
+	return &Rl{
+		"> ",
+		'*',
+	}
+}
+
+func (r *Rl) readLine(passwordInput bool) (string, error) {
+	c, err := newCtx(r.Prompt)
 	if err != nil {
 		return "", err
 	}
@@ -22,9 +34,13 @@ func ReadLine(prompt string) (string, error) {
 	}()
 
 	dirty := true
+	var passwordRune rune
+	if passwordInput {
+		passwordRune = r.PasswordRune
+	}
 loop:
 	for !quit {
-		err = c.redraw(dirty)
+		err = c.redraw(dirty, passwordRune)
 		if err != nil {
 			return "", err
 		}
@@ -90,4 +106,26 @@ loop:
 	os.Stdout.WriteString("\n")
 
 	return string(c.input), nil
+
+}
+
+func (r *Rl) ReadLine() (string, error) {
+	return r.readLine(false)
+}
+
+func (r *Rl) ReadPassword() (string, error) {
+	return r.readLine(true)
+}
+
+func ReadLine(prompt string) (string, error) {
+	r := NewRl()
+	r.Prompt = prompt
+	return r.readLine(false)
+}
+
+func ReadPassword(prompt string) (string, error) {
+	r := NewRl()
+	r.Prompt = prompt
+	r.PasswordRune = '*'
+	return r.readLine(true)
 }
