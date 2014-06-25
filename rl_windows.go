@@ -36,6 +36,7 @@ var (
 	procGetConsoleScreenBufferInfo  = kernel32.NewProc("GetConsoleScreenBufferInfo")
 	procWriteConsoleOutputCharacter = kernel32.NewProc("WriteConsoleOutputCharacterW")
 	procWriteConsoleOutputAttribute = kernel32.NewProc("WriteConsoleOutputAttribute")
+	procGetConsoleCursorInfo        = kernel32.NewProc("GetConsoleCursorInfo")
 	procSetConsoleCursorInfo        = kernel32.NewProc("SetConsoleCursorInfo")
 	procSetConsoleCursorPosition    = kernel32.NewProc("SetConsoleCursorPosition")
 	procReadConsoleInput            = kernel32.NewProc("ReadConsoleInputW")
@@ -142,9 +143,12 @@ type ctx struct {
 	out      uintptr
 	st       uint32
 	input    []rune
-	cursor_x int
 	prompt   string
-	pos      coord
+	cursor_x int
+	old_row     int
+	old_crow     int
+	size     int
+	old_size  int
 }
 
 func (c *ctx) readRunes() ([]rune, error) {
@@ -209,9 +213,11 @@ func NewRl(prompt string) (*ctx, error) {
 	if r1 == 0 {
 		return nil, err
 	}
-	c.pos = csbi.cursorPosition
+
 	c.prompt = prompt
 	c.input = []rune{}
+	c.size = int(csbi.size.x) - 1
+	c.old_size = c.size
 
 	return c, nil
 }
@@ -223,44 +229,92 @@ func (c *ctx) tearDown() {
 func (c *ctx) redraw(dirty bool) error {
 	var csbi consoleScreenBufferInfo
 
-	var cursor coord
-	cursor.x = c.pos.x
-	cursor.y = c.pos.y
-	r1, _, err := procGetConsoleScreenBufferInfo.Call(c.out, uintptr(unsafe.Pointer(&csbi)))
+	var ci consoleCursorInfo
+	r1, _, err := procGetConsoleCursorInfo.Call(c.out, uintptr(unsafe.Pointer(&ci)))
 	if r1 == 0 {
 		return err
 	}
-	width := short(runewidth.StringWidth(c.prompt)) + short(runewidth.StringWidth(string(c.input[:c.cursor_x])))
+	ci.visible = 0
+	r1, _, err = procSetConsoleCursorInfo.Call(c.out, uintptr(unsafe.Pointer(&ci)))
+	if r1 == 0 {
+		return err
+	}
+	defer func() {
+		ci.visible = 1
+		procSetConsoleCursorInfo.Call(c.out, uintptr(unsafe.Pointer(&ci)))
+	}()
+
+	r1, _, err = procGetConsoleScreenBufferInfo.Call(c.out, uintptr(unsafe.Pointer(&csbi)))
+	if r1 == 0 {
+		return err
+	}
+
+	var oldpos, cursor coord
+	oldpos.x = 0
+	oldpos.y = csbi.cursorPosition.y - short(c.old_crow)
+	cursor.x = 0
+	cursor.y = oldpos.y
+	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
+	if r1 == 0 {
+		return err
+	}
 	if dirty {
 		var w uint32
-		cursor.x = 0
-		rows := width / short(csbi.size.x)
-		for i := short(0); i <= rows; i++ {
+		r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+		if r1 == 0 {
+			return err
+		}
+	}
+	cursor.y -= short(c.old_row - c.old_crow)
+	if dirty {
+		for i := 0; i <  c.old_row; i++ {
+			var w uint32
 			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
 			if r1 == 0 {
 				return err
 			}
 			cursor.y++
 		}
-		cursor.x = c.pos.x
-		cursor.y = c.pos.y
-		r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
-		if r1 == 0 {
-			return err
-		}
-		writeConsole(c.out, []rune(c.prompt+string(c.input)))
-		r1, _, err = procGetConsoleScreenBufferInfo.Call(c.out, uintptr(unsafe.Pointer(&csbi)))
-		if r1 == 0 {
-			return err
-		}
-		c.pos.y = csbi.cursorPosition.y - rows
 	}
-	cursor.x = width
-	cursor.y += cursor.x / csbi.size.x
-	cursor.x %= csbi.size.x
+
+	var ccol, crow, col, row int
+	ccol = -1
+	plen := len([]rune(c.prompt))
+	for i, r := range []rune(c.prompt + string(c.input)) {
+		if i == plen + c.cursor_x {
+			ccol = col
+			crow = row
+		}
+		rw := runewidth.RuneWidth(r)
+		if col + rw >= c.size {
+			col = 0
+			row++
+		}
+		if dirty {
+			cursor.x = oldpos.x + short(col)
+			cursor.y = oldpos.y + short(row)
+			var w uint32
+			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(r), uintptr(rw), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+			if r1 == 0 {
+				return err
+			}
+		}
+		col += rw
+	}
+
+	if ccol == -1 {
+		ccol = col
+		crow = row
+	}
+	cursor.x = oldpos.x + short(ccol)
+	cursor.y = oldpos.y + short(crow)
 	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 	if r1 == 0 {
-		//return err
+		return err
 	}
+
+	c.old_row = row
+	c.old_crow = crow
+
 	return nil
 }

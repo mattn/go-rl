@@ -17,9 +17,8 @@ type ctx struct {
 	out          uintptr
 	st           syscall.Termios
 	input        []rune
-	cursor_x     int
 	prompt       string
-	old_cursor_x int
+	cursor_x     int
 	old_row     int
 	old_crow     int
 	size         int
@@ -74,7 +73,6 @@ func (c *ctx) redraw(dirty bool) error {
 
 	//buf.WriteString("\x1b[>5h")
 
-	ccol, crow, col, row := -1, 0, 0, 0
 	buf.WriteString("\x1b[0G")
 	if dirty {
 		buf.WriteString("\x1b[0K")
@@ -88,6 +86,8 @@ func (c *ctx) redraw(dirty bool) error {
 		}
 		buf.WriteString("\x1b[A")
 	}
+
+	ccol, crow, col, row := -1, 0, 0, 0
 	plen := len([]rune(c.prompt))
 	for i, r := range []rune(c.prompt + string(c.input)) {
 		if i == plen + c.cursor_x {
@@ -126,7 +126,6 @@ func (c *ctx) redraw(dirty bool) error {
 	io.Copy(os.Stdout, &buf)
 	os.Stdout.Sync()
 
-	c.old_cursor_x = c.cursor_x
 	c.old_row = row
 	c.old_crow = crow
 
