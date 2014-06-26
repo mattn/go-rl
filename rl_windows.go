@@ -295,7 +295,7 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 			crow = row
 		}
 		rw := runewidth.RuneWidth(r)
-		if col + rw >= c.size {
+		if col + rw > c.size {
 			col = 0
 			row++
 		}
@@ -317,6 +317,9 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	}
 	cursor.x = oldpos.x + short(ccol)
 	cursor.y = oldpos.y + short(crow)
+	if cursor.y >= csbi.size.y {
+		cursor.y = csbi.size.y
+	}
 	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 	if r1 == 0 {
 		return err
