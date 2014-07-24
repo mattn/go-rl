@@ -62,6 +62,7 @@ type smallRect struct {
 	right  short
 	bottom short
 }
+
 type consoleScreenBufferInfo struct {
 	size              coord
 	cursorPosition    coord
@@ -260,7 +261,7 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	}
 	if dirty {
 		var w uint32
-		r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+		r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&w)))
 		if r1 == 0 {
 			return err
 		}
@@ -269,7 +270,7 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	if dirty {
 		for i := 0; i <  c.old_row; i++ {
 			var w uint32
-			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&w)))
 			if r1 == 0 {
 				return err
 			}
@@ -303,7 +304,7 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 			cursor.x = oldpos.x + short(col)
 			cursor.y = oldpos.y + short(row)
 			var w uint32
-			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(r), uintptr(rw), *(*uintptr)(unsafe.Pointer(&cursor)), uintptr(unsafe.Pointer(&w)))
+			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(r), uintptr(rw), uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&w)))
 			if r1 == 0 {
 				return err
 			}
