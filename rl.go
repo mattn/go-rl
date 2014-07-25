@@ -6,15 +6,16 @@ import (
 )
 
 type Rl struct {
-	Prompt string
+	Prompt       string
 	PasswordRune rune
+	CompleteFunc func(string, int) (int, []string)
+	completePos int
+	completeIndex int
+	completeCandidate []string
 }
 
 func NewRl() *Rl {
-	return &Rl{
-		"> ",
-		'*',
-	}
+	return &Rl{Prompt:"> ", PasswordRune:'*', completeIndex: -1}
 }
 
 func (r *Rl) readLine(passwordInput bool) (string, error) {
@@ -50,8 +51,8 @@ loop:
 		if err != nil {
 			break
 		}
-		for _, r := range rs {
-			switch r {
+		for _, rc := range rs {
+			switch rc {
 			case 0:
 			case 1: // CTRL-A
 				c.cursor_x = 0
@@ -72,6 +73,28 @@ loop:
 					c.input = append(c.input[0:c.cursor_x-1], c.input[c.cursor_x:len(c.input)]...)
 					c.cursor_x--
 					dirty = true
+				}
+			case 9: // TAB
+				if r.completeIndex == -1 && r.CompleteFunc != nil {
+					r.completePos, r.completeCandidate = r.CompleteFunc(string(c.input), c.cursor_x)
+					if r.completePos >= 0 {
+						r.completeIndex = 0
+					}
+				}
+				if r.completeIndex >= 0 {
+					var item string
+					if r.completeIndex >= len(r.completeCandidate) {
+						r.completeIndex = 0
+					} else {
+						item = r.completeCandidate[r.completeIndex]
+						r.completeIndex++
+					}
+					tmp := []rune{}
+					tmp = append(tmp, c.input[0:r.completePos]...)
+					tmp = append(tmp, []rune(item)...)
+					c.input = tmp
+					dirty = true
+					c.cursor_x = r.completePos + len(item)
 				}
 			case 10: // LF
 				break loop
@@ -96,17 +119,19 @@ loop:
 			default:
 				tmp := []rune{}
 				tmp = append(tmp, c.input[0:c.cursor_x]...)
-				tmp = append(tmp, r)
+				tmp = append(tmp, rc)
 				c.input = append(tmp, c.input[c.cursor_x:len(c.input)]...)
 				c.cursor_x++
 				dirty = true
+			}
+			if rc != 9 && dirty {
+				r.completeIndex = -1
 			}
 		}
 	}
 	os.Stdout.WriteString("\n")
 
 	return string(c.input), nil
-
 }
 
 func (r *Rl) ReadLine() (string, error) {
