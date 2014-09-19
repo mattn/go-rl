@@ -50,19 +50,18 @@ func main() {
 			continue
 		}
 
-		for i, v := range words {
-			if runtime.GOOS == "windows" {
+		if runtime.GOOS == "windows" {
+			for _, v := range words {
 				v = strings.Replace(v, `\`, `/`, -1)
 			}
-			words[i] = strings.Replace(v, ` `, `\ `, -1)
 		}
 
 		if words[0] == "exit" {
 			break
 		}
 
-		if len(words) == 2 && words[0] == "cd" {
-			err = os.Chdir(words[1])
+		if len(words) >= 2 && words[0] == "cd" {
+			err = os.Chdir(filepath.Clean(strings.Join(words[1:], " ")))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 			}
