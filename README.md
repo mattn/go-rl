@@ -13,5 +13,6 @@
 * redraw characters that have modified 
 * hide overflowed characters
 * history
-* completion
+* ~~completion~~
+* key binding
 * ~~password inputs~~
