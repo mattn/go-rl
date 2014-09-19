@@ -85,7 +85,9 @@ loop:
 					var item string
 					if r.completeIndex >= len(r.completeCandidate) {
 						r.completeIndex = 0
-						item = r.completeCandidate[r.completeIndex]
+						if len(r.completeCandidate) > 0 {
+							item = r.completeCandidate[0]
+						}
 					} else {
 						item = r.completeCandidate[r.completeIndex]
 						r.completeIndex++
