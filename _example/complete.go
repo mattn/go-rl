@@ -13,8 +13,8 @@ func main() {
 	r.CompleteFunc = func(line string, pos int) (int, []string) {
 		rs := []rune(line)
 		start := pos
-		for pos > 0 {
-			if rs[pos-1] == ' ' && (pos == 1 || rs[pos-2] != '\\') {
+		for pos >= 0 {
+			if pos == 0 || pos > 0 && rs[pos-1] == ' ' && (pos == 1 || rs[pos-2] != '\\') {
 				v := strings.Replace(string(rs[pos:]), `\ `, ` `, -1)
 				if runtime.GOOS == "windows" {
 					v = strings.Replace(v, `/`, `\`, -1)
