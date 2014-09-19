@@ -43,6 +43,7 @@ func main() {
 	for {
 		b, err := r.ReadLine()
 		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			break
 		}
 		words, err := shellwords.Parse(string(b))
