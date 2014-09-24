@@ -40,6 +40,13 @@ func (c *ctx) readRunes() ([]rune, error) {
 	return []rune(string(buf[:n])), nil
 }
 
+type winsize struct {
+    Row    uint16
+    Col    uint16
+    Xpixel uint16
+    Ypixel uint16
+}
+
 func newCtx(prompt string) (*ctx, error) {
 	c := new(ctx)
 
@@ -61,7 +68,11 @@ func newCtx(prompt string) (*ctx, error) {
 	c.prompt = prompt
 	c.input = []rune{}
 
-	c.size = 80
+	var ws winsize
+	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdin), uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(&ws))); err != 0 {
+        return nil, err
+    }
+    c.size = int(ws.Col)
 	return c, nil
 }
 
