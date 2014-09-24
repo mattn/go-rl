@@ -1,6 +1,7 @@
 package rl
 
 import (
+	"io"
 	"os"
 	"os/signal"
 )
@@ -62,6 +63,11 @@ loop:
 				}
 			case 3: // BREAK
 				return "", nil
+			case 4: // CTRL-D
+				if len(c.input) > 0 {
+					continue
+				}
+				return "", io.EOF
 			case 5: // CTRL-E
 				c.cursor_x = len(c.input)
 			case 6: // CTRL-F
