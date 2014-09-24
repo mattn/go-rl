@@ -6,16 +6,16 @@ import (
 )
 
 type Rl struct {
-	Prompt       string
-	PasswordRune rune
-	CompleteFunc func(string, int) (int, []string)
-	completePos int
-	completeIndex int
+	Prompt            string
+	PasswordRune      rune
+	CompleteFunc      func(string, int) (int, []string)
+	completePos       int
+	completeIndex     int
 	completeCandidate []string
 }
 
 func NewRl() *Rl {
-	return &Rl{Prompt:"> ", PasswordRune:'*', completeIndex: -1}
+	return &Rl{Prompt: "> ", PasswordRune: '*', completeIndex: -1}
 }
 
 func (r *Rl) readLine(passwordInput bool) (string, error) {

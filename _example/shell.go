@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -19,16 +18,10 @@ func main() {
 		for pos >= 0 {
 			if pos == 0 || pos > 0 && rs[pos-1] == ' ' && (pos == 1 || rs[pos-2] != '\\') {
 				v := strings.Replace(string(rs[pos:]), `\ `, ` `, -1)
-				if runtime.GOOS == "windows" {
-					v = strings.Replace(v, `/`, `\`, -1)
-				}
-				files, _ := filepath.Glob(v + "*")
+				files, _ := filepath.Glob(filepath.FromSlash(v) + "*")
 				if len(files) > 0 {
 					for i, v := range files {
-						if runtime.GOOS == "windows" {
-							v = strings.Replace(v, `\`, `/`, -1)
-						}
-						files[i] = strings.Replace(v, ` `, `\ `, -1)
+						files[i] = strings.Replace(filepath.ToSlash(v), ` `, `\ `, -1)
 					}
 					return pos, files
 				} else {
@@ -51,10 +44,8 @@ func main() {
 			continue
 		}
 
-		if runtime.GOOS == "windows" {
-			for _, v := range words {
-				v = strings.Replace(v, `\`, `/`, -1)
-			}
+		for i, v := range words {
+			words[i] = filepath.ToSlash(v)
 		}
 
 		if words[0] == "exit" {

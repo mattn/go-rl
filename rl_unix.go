@@ -13,15 +13,16 @@ import (
 )
 
 type ctx struct {
-	in           uintptr
-	out          uintptr
-	st           syscall.Termios
-	input        []rune
-	prompt       string
-	cursor_x     int
-	old_row     int
-	old_crow     int
-	size         int
+	in       uintptr
+	out      uintptr
+	st       syscall.Termios
+	input    []rune
+	last     []rune
+	prompt   string
+	cursor_x int
+	old_row  int
+	old_crow int
+	size     int
 }
 
 func (c *ctx) readRunes() ([]rune, error) {
@@ -77,10 +78,10 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	if dirty {
 		buf.WriteString("\x1b[0K")
 	}
-	for i := 0; i <  c.old_row - c.old_crow; i++ {
+	for i := 0; i < c.old_row-c.old_crow; i++ {
 		buf.WriteString("\x1b[B")
 	}
-	for i := 0; i <  c.old_row; i++ {
+	for i := 0; i < c.old_row; i++ {
 		if dirty {
 			buf.WriteString("\x1b[2K")
 		}
@@ -99,12 +100,12 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	ccol, crow, col, row := -1, 0, 0, 0
 	plen := len([]rune(c.prompt))
 	for i, r := range []rune(c.prompt + string(rs)) {
-		if i == plen + c.cursor_x {
+		if i == plen+c.cursor_x {
 			ccol = col
 			crow = row
 		}
 		rw := runewidth.RuneWidth(r)
-		if col + rw > c.size {
+		if col+rw > c.size {
 			col = 0
 			row++
 			if dirty {
@@ -118,7 +119,7 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	}
 	if dirty {
 		buf.WriteString("\x1b[0G")
-		for i := 0; i <  row; i++ {
+		for i := 0; i < row; i++ {
 			buf.WriteString("\x1b[A")
 		}
 	}
@@ -126,10 +127,10 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 		ccol = col
 		crow = row
 	}
-	for i := 0; i <  crow; i++ {
+	for i := 0; i < crow; i++ {
 		buf.WriteString("\x1b[B")
 	}
-	buf.WriteString(fmt.Sprintf("\x1b[%dG", ccol + 1))
+	buf.WriteString(fmt.Sprintf("\x1b[%dG", ccol+1))
 
 	//buf.WriteString("\x1b[>5l")
 	io.Copy(os.Stdout, &buf)

@@ -44,7 +44,7 @@ var (
 	procSetConsoleMode              = kernel32.NewProc("SetConsoleMode")
 	procFillConsoleOutputCharacter  = kernel32.NewProc("FillConsoleOutputCharacterW")
 	procFillConsoleOutputAttribute  = kernel32.NewProc("FillConsoleOutputAttribute")
-	procScrollConsoleScreenBuffer   = kernel32.NewProc("ScrollConsoleScreenBuffer")
+	procScrollConsoleScreenBuffer   = kernel32.NewProc("ScrollConsoleScreenBufferW")
 )
 
 type wchar uint16
@@ -104,8 +104,8 @@ type mouseEventRecord struct {
 }
 
 type charInfo struct {
-	unicodeChar     wchar
-    attributes      word
+	unicodeChar wchar
+	attributes  word
 }
 
 func isTty() bool {
@@ -150,12 +150,13 @@ type ctx struct {
 	out      uintptr
 	st       uint32
 	input    []rune
+	last     []rune
 	prompt   string
 	cursor_x int
-	old_row     int
-	old_crow     int
+	old_row  int
+	old_crow int
 	size     int
-	old_size  int
+	old_size int
 }
 
 func (c *ctx) readRunes() ([]rune, error) {
@@ -221,7 +222,8 @@ func newCtx(prompt string) (*ctx, error) {
 
 	c.prompt = prompt
 	c.input = []rune{}
-	c.size = int(csbi.size.x) - 1
+	c.last = []rune{}
+	c.size = int(csbi.size.x)
 	c.old_size = c.size
 
 	return c, nil
@@ -272,7 +274,7 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	}
 	cursor.y -= short(c.old_row - c.old_crow)
 	if dirty {
-		for i := 0; i <  c.old_row; i++ {
+		for i := 0; i < c.old_row; i++ {
 			var w uint32
 			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(' '), uintptr(csbi.size.x), uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&w)))
 			if r1 == 0 {
@@ -294,16 +296,13 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	var ccol, crow, col, row int
 	ccol = -1
 	plen := len([]rune(c.prompt))
-	for i, r := range []rune(c.prompt + string(rs)) {
-		if i == plen + c.cursor_x {
+	curr := []rune(c.prompt + string(rs))
+	for i, r := range curr {
+		if i == plen+c.cursor_x {
 			ccol = col
 			crow = row
 		}
 		rw := runewidth.RuneWidth(r)
-		if col + rw > c.size {
-			col = 0
-			row++
-		}
 		if dirty {
 			cursor.x = oldpos.x + short(col)
 			cursor.y = oldpos.y + short(row)
@@ -314,18 +313,31 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 			}
 		}
 		col += rw
+		if col >= c.size {
+			col = 0
+			row++
+			if short(row) >= csbi.size.y-oldpos.y {
+				ci := charInfo{unicodeChar: wchar(' '), attributes: csbi.attributes}
+				sr := smallRect{left: 0, top: 0, right: csbi.size.x - 1, bottom: csbi.size.y - 1}
+				mv := coord{x: 0, y: -1}
+				procScrollConsoleScreenBuffer.Call(c.out, uintptr(unsafe.Pointer(&sr)), uintptr(unsafe.Pointer(&sr)), uintptr(*(*int32)(unsafe.Pointer(&mv))), uintptr(unsafe.Pointer(&ci)))
+				dirty = true
+			}
+		}
 	}
+	c.last = curr
 
 	if ccol == -1 {
 		ccol = col
 		crow = row
 	}
 	cursor.x = oldpos.x + short(ccol)
+	if cursor.x >= csbi.size.x {
+		cursor.x = csbi.size.x - 1
+	}
 	cursor.y = oldpos.y + short(crow)
 	if cursor.y >= csbi.size.y {
-		cursor.y = csbi.size.y
-		ci := charInfo {unicodeChar: wchar(' '), attributes: csbi.attributes}
-		procScrollConsoleScreenBuffer.Call(c.out, uintptr(unsafe.Pointer(&csbi.window)), 0, uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&ci)))
+		cursor.y = csbi.size.y - 1
 	}
 	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 	if r1 == 0 {
