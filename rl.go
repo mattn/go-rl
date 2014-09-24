@@ -110,6 +110,8 @@ loop:
 			case 11: // CTRL-K
 				c.input = c.input[:c.cursor_x]
 				dirty = true
+			case 12: // CTRL-L
+				dirty = true
 			case 13: // CR
 				break loop
 			case 21: // CTRL-U
