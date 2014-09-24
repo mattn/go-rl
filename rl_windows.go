@@ -44,6 +44,7 @@ var (
 	procSetConsoleMode              = kernel32.NewProc("SetConsoleMode")
 	procFillConsoleOutputCharacter  = kernel32.NewProc("FillConsoleOutputCharacterW")
 	procFillConsoleOutputAttribute  = kernel32.NewProc("FillConsoleOutputAttribute")
+	procScrollConsoleScreenBuffer   = kernel32.NewProc("ScrollConsoleScreenBuffer")
 )
 
 type wchar uint16
@@ -100,6 +101,11 @@ type mouseEventRecord struct {
 	buttonState     dword
 	controlKeyState dword
 	eventFlags      dword
+}
+
+type charInfo struct {
+	unicodeChar     wchar
+    attributes      word
 }
 
 func isTty() bool {
@@ -166,11 +172,9 @@ func (c *ctx) readRunes() ([]rune, error) {
 			return []rune{rune(kr.unicodeChar)}, nil
 		}
 	case windowBufferSizeEvent:
-		sr := *(*windowBufferSizeRecord)(unsafe.Pointer(&ir.event))
-		println(&sr)
+		//sr := *(*windowBufferSizeRecord)(unsafe.Pointer(&ir.event))
 	case mouseEvent:
-		mr := *(*mouseEventRecord)(unsafe.Pointer(&ir.event))
-		println(&mr)
+		//mr := *(*mouseEventRecord)(unsafe.Pointer(&ir.event))
 	}
 
 	return nil, nil
@@ -320,6 +324,8 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 	cursor.y = oldpos.y + short(crow)
 	if cursor.y >= csbi.size.y {
 		cursor.y = csbi.size.y
+		ci := charInfo {unicodeChar: wchar(' '), attributes: csbi.attributes}
+		procScrollConsoleScreenBuffer.Call(c.out, uintptr(unsafe.Pointer(&csbi.window)), 0, uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&ci)))
 	}
 	r1, _, err = procSetConsoleCursorPosition.Call(c.out, uintptr(*(*int32)(unsafe.Pointer(&cursor))))
 	if r1 == 0 {
