@@ -11,12 +11,32 @@ type Rl struct {
 	PasswordRune      rune
 	CompleteFunc      func(string, int) (int, []string)
 	completePos       int
-	completeIndex     int
 	completeCandidate []string
 }
 
+// Count the number of common initial characters
+func countCommonPrefixLength(words []string) int {
+	pos := 0
+outer:
+	for ; ; pos++ {
+		if pos >= len(words[0]) {
+			break outer
+		}
+		ch := words[0][pos]
+		for _, word := range words[1:] {
+			if pos >= len(word) {
+				break outer
+			}
+			if word[pos] != ch {
+				break outer
+			}
+		}
+	}
+	return pos
+}
+
 func NewRl() *Rl {
-	return &Rl{Prompt: "> ", PasswordRune: '*', completeIndex: -1}
+	return &Rl{Prompt: "> ", PasswordRune: '*'}
 }
 
 func (r *Rl) readLine(passwordInput bool) (string, error) {
@@ -81,29 +101,16 @@ loop:
 					dirty = true
 				}
 			case 9: // TAB
-				if r.completeIndex == -1 && r.CompleteFunc != nil {
+				if r.CompleteFunc != nil {
 					r.completePos, r.completeCandidate = r.CompleteFunc(string(c.input), c.cursor_x)
-					if r.completePos >= 0 {
-						r.completeIndex = 0
-					}
-				}
-				if r.completeIndex >= 0 {
-					var item string
-					if r.completeIndex >= len(r.completeCandidate) {
-						r.completeIndex = 0
-						if len(r.completeCandidate) > 0 {
-							item = r.completeCandidate[0]
-						}
-					} else {
-						item = r.completeCandidate[r.completeIndex]
-						r.completeIndex++
-					}
+					common := countCommonPrefixLength(r.completeCandidate)
+					item := r.completeCandidate[0][0:common]
 					tmp := []rune{}
 					tmp = append(tmp, c.input[0:r.completePos]...)
 					tmp = append(tmp, []rune(item)...)
 					c.input = tmp
 					dirty = true
-					c.cursor_x = r.completePos + len(item)
+					c.cursor_x = r.completePos + common
 				}
 			case 10: // LF
 				break loop
@@ -134,9 +141,6 @@ loop:
 				c.input = append(tmp, c.input[c.cursor_x:len(c.input)]...)
 				c.cursor_x++
 				dirty = true
-			}
-			if rc != 9 && dirty {
-				r.completeIndex = -1
 			}
 		}
 	}
