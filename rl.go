@@ -103,14 +103,16 @@ loop:
 			case 9: // TAB
 				if r.CompleteFunc != nil {
 					r.completePos, r.completeCandidate = r.CompleteFunc(string(c.input), c.cursor_x)
-					common := countCommonPrefixLength(r.completeCandidate)
-					item := r.completeCandidate[0][0:common]
-					tmp := []rune{}
-					tmp = append(tmp, c.input[0:r.completePos]...)
-					tmp = append(tmp, []rune(item)...)
-					c.input = tmp
-					dirty = true
-					c.cursor_x = r.completePos + common
+					if len(r.completeCandidate) > 0 {
+						common := countCommonPrefixLength(r.completeCandidate)
+						item := r.completeCandidate[0][0:common]
+						tmp := []rune{}
+						tmp = append(tmp, c.input[0:r.completePos]...)
+						tmp = append(tmp, []rune(item)...)
+						c.input = tmp
+						dirty = true
+						c.cursor_x = r.completePos + common
+					}
 				}
 			case 10: // LF
 				break loop
