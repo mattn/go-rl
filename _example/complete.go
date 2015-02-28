@@ -27,6 +27,11 @@ func main() {
 						}
 						files[i] = strings.Replace(v, ` `, `\ `, -1)
 					}
+					if len(files) == 1 {
+						files = []string{files[0] + "/"}
+					} else {
+						fmt.Printf("\n%v\n", files)
+					}
 					return pos, files
 				} else {
 					return start, []string{}
