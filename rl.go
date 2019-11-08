@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"unicode/utf8"
 )
 
 type Rl struct {
@@ -111,7 +112,7 @@ loop:
 						tmp = append(tmp, []rune(item)...)
 						c.input = tmp
 						dirty = true
-						c.cursor_x = r.completePos + common
+						c.cursor_x = r.completePos + utf8.RuneCountInString(item)
 					}
 				}
 			case 10: // LF
