@@ -7,12 +7,10 @@ import (
 )
 
 type Rl struct {
-	Prompt            string
-	PasswordRune      rune
-	EOFOnCtrlD        bool
-	CompleteFunc      func(string, int) (int, []string)
-	completePos       int
-	completeCandidate []string
+	Prompt       string
+	PasswordRune rune
+	EOFOnCtrlD   bool
+	CompleteFunc func(string, int) (int, []string)
 }
 
 func commonPrefix(words []string) string {
@@ -27,6 +25,7 @@ func commonPrefix(words []string) string {
 		if len(rs) < n {
 			n = len(rs)
 		}
+
 		i := 0
 		for i < n && prefix[i] == rs[i] {
 			i++
@@ -62,7 +61,6 @@ func applyCompletion(input []rune, completePos, cursor int, candidates []string)
 	tmp = append(tmp, input[:completePos]...)
 	tmp = append(tmp, []rune(item)...)
 	tmp = append(tmp, input[cursor:]...)
-
 	return tmp, completePos + len([]rune(item)), true
 }
 
@@ -78,13 +76,29 @@ func deleteWordBeforeCursor(input []rune, cursor int) ([]rune, int, bool) {
 	for start > 0 && input[start-1] != ' ' && input[start-1] != '\t' {
 		start--
 	}
-
 	if start == cursor {
 		return input, cursor, false
 	}
 
 	out := append(input[:start], input[cursor:]...)
 	return out, start, true
+}
+
+func insertRune(input []rune, cursor int, r rune) ([]rune, int) {
+	tmp := make([]rune, 0, len(input)+1)
+	tmp = append(tmp, input[:cursor]...)
+	tmp = append(tmp, r)
+	tmp = append(tmp, input[cursor:]...)
+	return tmp, cursor + 1
+}
+
+func deleteRuneBeforeCursor(input []rune, cursor int) ([]rune, int, bool) {
+	if cursor <= 0 || cursor > len(input) {
+		return input, cursor, false
+	}
+
+	out := append(input[:cursor-1], input[cursor:]...)
+	return out, cursor - 1, true
 }
 
 func (r *Rl) readLine(passwordInput bool) (string, error) {
@@ -104,15 +118,15 @@ func (r *Rl) readLine(passwordInput bool) (string, error) {
 		quit = true
 	}()
 
-	dirty := true
-	var passwordRune rune
+	passwordRune := rune(0)
 	if passwordInput {
 		passwordRune = r.PasswordRune
 	}
+
+	dirty := true
 loop:
 	for !quit {
-		err = c.redraw(dirty, passwordRune)
-		if err != nil {
+		if err := c.redraw(dirty, passwordRune); err != nil {
 			return "", err
 		}
 		dirty = false
@@ -144,19 +158,20 @@ loop:
 					c.cursor_x++
 				}
 			case 8, 0x7F: // BS
-				if c.cursor_x > 0 {
-					c.input = append(c.input[0:c.cursor_x-1], c.input[c.cursor_x:len(c.input)]...)
-					c.cursor_x--
+				var ok bool
+				c.input, c.cursor_x, ok = deleteRuneBeforeCursor(c.input, c.cursor_x)
+				if ok {
 					dirty = true
 				}
 			case 9: // TAB
-				if r.CompleteFunc != nil {
-					r.completePos, r.completeCandidate = r.CompleteFunc(string(c.input), c.cursor_x)
-					var ok bool
-					c.input, c.cursor_x, ok = applyCompletion(c.input, r.completePos, c.cursor_x, r.completeCandidate)
-					if ok {
-						dirty = true
-					}
+				if r.CompleteFunc == nil {
+					continue
+				}
+				completePos, candidates := r.CompleteFunc(string(c.input), c.cursor_x)
+				var ok bool
+				c.input, c.cursor_x, ok = applyCompletion(c.input, completePos, c.cursor_x, candidates)
+				if ok {
+					dirty = true
 				}
 			case 10: // LF
 				break loop
@@ -178,17 +193,13 @@ loop:
 					dirty = true
 				}
 			default:
-				tmp := []rune{}
-				tmp = append(tmp, c.input[0:c.cursor_x]...)
-				tmp = append(tmp, rc)
-				c.input = append(tmp, c.input[c.cursor_x:len(c.input)]...)
-				c.cursor_x++
+				c.input, c.cursor_x = insertRune(c.input, c.cursor_x, rc)
 				dirty = true
 			}
 		}
 	}
-	os.Stdout.WriteString("\n")
 
+	os.Stdout.WriteString("\n")
 	return string(c.input), nil
 }
 

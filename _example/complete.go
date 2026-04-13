@@ -2,44 +2,69 @@ package main
 
 import (
 	"fmt"
-	"github.com/mattn/go-rl"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/mattn/go-rl"
 )
+
+func completionStart(rs []rune, cursor int) int {
+	for start := cursor; start >= 0; start-- {
+		if start == 0 || rs[start-1] == ' ' && (start == 1 || rs[start-2] != '\\') {
+			return start
+		}
+	}
+	return -1
+}
+
+func globPattern(fragment string) string {
+	fragment = strings.ReplaceAll(fragment, `\ `, ` `)
+	if runtime.GOOS == "windows" {
+		fragment = strings.ReplaceAll(fragment, `/`, `\`)
+	}
+	return fragment + "*"
+}
+
+func formatCandidate(path string) string {
+	display := path
+	if runtime.GOOS == "windows" {
+		display = strings.ReplaceAll(display, `\`, `/`)
+	}
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		display += "/"
+	}
+	return strings.ReplaceAll(display, ` `, `\ `)
+}
+
+func completePath(line string, cursor int) (int, []string) {
+	rs := []rune(line)
+	start := completionStart(rs, cursor)
+	if start < 0 {
+		return -1, nil
+	}
+
+	files, _ := filepath.Glob(globPattern(string(rs[start:cursor])))
+	if len(files) == 0 {
+		return cursor, []string{}
+	}
+
+	candidates := make([]string, len(files))
+	for i, path := range files {
+		candidates[i] = formatCandidate(path)
+	}
+	return start, candidates
+}
 
 func main() {
 	r := rl.NewRl()
 	r.CompleteFunc = func(line string, pos int) (int, []string) {
-		rs := []rune(line)
-		start := pos
-		for pos >= 0 {
-			if pos == 0 || pos > 0 && rs[pos-1] == ' ' && (pos == 1 || rs[pos-2] != '\\') {
-				v := strings.Replace(string(rs[pos:]), `\ `, ` `, -1)
-				if runtime.GOOS == "windows" {
-					v = strings.Replace(v, `/`, `\`, -1)
-				}
-				files, _ := filepath.Glob(v + "*")
-				if len(files) > 0 {
-					for i, v := range files {
-						if runtime.GOOS == "windows" {
-							v = strings.Replace(v, `\`, `/`, -1)
-						}
-						files[i] = strings.Replace(v, ` `, `\ `, -1)
-					}
-					if len(files) == 1 {
-						files = []string{files[0] + "/"}
-					} else {
-						fmt.Printf("\n%v\n", files)
-					}
-					return pos, files
-				} else {
-					return start, []string{}
-				}
-			}
-			pos--
+		start, candidates := completePath(line, pos)
+		if len(candidates) > 1 {
+			fmt.Printf("\n%v\n", candidates)
 		}
-		return -1, nil
+		return start, candidates
 	}
 
 	for {
