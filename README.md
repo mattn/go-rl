@@ -16,3 +16,12 @@
 * ~~completion~~
 * key binding
 * ~~password inputs~~
+
+## Ctrl-D
+
+Set `EOFOnCtrlD` to make `^D` return `io.EOF` even when the current line is not empty.
+
+```go
+r := rl.NewRl()
+r.EOFOnCtrlD = true
+```

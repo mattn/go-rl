@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package rl
@@ -9,6 +10,7 @@ import (
 	"io"
 	"os"
 	"syscall"
+	"unicode/utf8"
 	"unsafe"
 )
 
@@ -23,6 +25,7 @@ type ctx struct {
 	old_row  int
 	old_crow int
 	size     int
+	pending  []byte
 }
 
 func (c *ctx) readRunes() ([]rune, error) {
@@ -34,17 +37,42 @@ func (c *ctx) readRunes() ([]rune, error) {
 	if n == 0 {
 		return []rune{}, nil
 	}
-	if buf[n-1] == '\n' {
-		n--
+
+	rs, pending := decodeRunes(append(c.pending, buf[:n]...))
+	c.pending = pending
+	return rs, nil
+}
+
+func decodeRunes(buf []byte) ([]rune, []byte) {
+	if len(buf) == 0 {
+		return []rune{}, nil
 	}
-	return []rune(string(buf[:n])), nil
+
+	var rs []rune
+	i := 0
+	for i < len(buf) {
+		if buf[i] == '\n' {
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRune(buf[i:])
+		if r == utf8.RuneError && size == 1 {
+			if !utf8.FullRune(buf[i:]) {
+				return rs, append([]byte(nil), buf[i:]...)
+			}
+		}
+		rs = append(rs, r)
+		i += size
+	}
+
+	return rs, nil
 }
 
 type winsize struct {
-    Row    uint16
-    Col    uint16
-    Xpixel uint16
-    Ypixel uint16
+	Row    uint16
+	Col    uint16
+	Xpixel uint16
+	Ypixel uint16
 }
 
 func newCtx(prompt string) (*ctx, error) {
@@ -70,9 +98,9 @@ func newCtx(prompt string) (*ctx, error) {
 
 	var ws winsize
 	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdin), uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(&ws))); err != 0 {
-        return nil, err
-    }
-    c.size = int(ws.Col)
+		return nil, err
+	}
+	c.size = int(ws.Col)
 	return c, nil
 }
 

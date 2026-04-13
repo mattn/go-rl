@@ -4,40 +4,87 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"unicode/utf8"
 )
 
 type Rl struct {
 	Prompt            string
 	PasswordRune      rune
+	EOFOnCtrlD        bool
 	CompleteFunc      func(string, int) (int, []string)
 	completePos       int
 	completeCandidate []string
 }
 
-// Count the number of common initial characters
-func countCommonPrefixLength(words []string) int {
-	pos := 0
-outer:
-	for ; ; pos++ {
-		if pos >= len(words[0]) {
-			break outer
+func commonPrefix(words []string) string {
+	if len(words) == 0 {
+		return ""
+	}
+
+	prefix := []rune(words[0])
+	for _, word := range words[1:] {
+		rs := []rune(word)
+		n := len(prefix)
+		if len(rs) < n {
+			n = len(rs)
 		}
-		ch := words[0][pos]
-		for _, word := range words[1:] {
-			if pos >= len(word) {
-				break outer
-			}
-			if word[pos] != ch {
-				break outer
-			}
+		i := 0
+		for i < n && prefix[i] == rs[i] {
+			i++
+		}
+		prefix = prefix[:i]
+		if len(prefix) == 0 {
+			return ""
 		}
 	}
-	return pos
+
+	return string(prefix)
 }
 
 func NewRl() *Rl {
 	return &Rl{Prompt: "> ", PasswordRune: '*'}
+}
+
+func shouldReturnEOFOnCtrlD(input []rune, eofOnCtrlD bool) bool {
+	return eofOnCtrlD || len(input) == 0
+}
+
+func applyCompletion(input []rune, completePos, cursor int, candidates []string) ([]rune, int, bool) {
+	if len(candidates) == 0 || completePos < 0 || completePos > cursor || cursor > len(input) {
+		return input, 0, false
+	}
+
+	item := commonPrefix(candidates)
+	if item == "" {
+		return input, 0, false
+	}
+
+	tmp := make([]rune, 0, completePos+len([]rune(item))+len(input)-cursor)
+	tmp = append(tmp, input[:completePos]...)
+	tmp = append(tmp, []rune(item)...)
+	tmp = append(tmp, input[cursor:]...)
+
+	return tmp, completePos + len([]rune(item)), true
+}
+
+func deleteWordBeforeCursor(input []rune, cursor int) ([]rune, int, bool) {
+	if cursor <= 0 || cursor > len(input) {
+		return input, cursor, false
+	}
+
+	start := cursor
+	for start > 0 && (input[start-1] == ' ' || input[start-1] == '\t') {
+		start--
+	}
+	for start > 0 && input[start-1] != ' ' && input[start-1] != '\t' {
+		start--
+	}
+
+	if start == cursor {
+		return input, cursor, false
+	}
+
+	out := append(input[:start], input[cursor:]...)
+	return out, start, true
 }
 
 func (r *Rl) readLine(passwordInput bool) (string, error) {
@@ -50,6 +97,7 @@ func (r *Rl) readLine(passwordInput bool) (string, error) {
 	quit := false
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, os.Interrupt)
+	defer signal.Stop(sc)
 	go func() {
 		<-sc
 		c.input = nil
@@ -85,7 +133,7 @@ loop:
 			case 3: // BREAK
 				return "", nil
 			case 4: // CTRL-D
-				if len(c.input) > 0 {
+				if !shouldReturnEOFOnCtrlD(c.input, r.EOFOnCtrlD) {
 					continue
 				}
 				return "", io.EOF
@@ -104,15 +152,10 @@ loop:
 			case 9: // TAB
 				if r.CompleteFunc != nil {
 					r.completePos, r.completeCandidate = r.CompleteFunc(string(c.input), c.cursor_x)
-					if len(r.completeCandidate) > 0 {
-						common := countCommonPrefixLength(r.completeCandidate)
-						item := r.completeCandidate[0][0:common]
-						tmp := []rune{}
-						tmp = append(tmp, c.input[0:r.completePos]...)
-						tmp = append(tmp, []rune(item)...)
-						c.input = tmp
+					var ok bool
+					c.input, c.cursor_x, ok = applyCompletion(c.input, r.completePos, c.cursor_x, r.completeCandidate)
+					if ok {
 						dirty = true
-						c.cursor_x = r.completePos + utf8.RuneCountInString(item)
 					}
 				}
 			case 10: // LF
@@ -129,13 +172,10 @@ loop:
 				c.cursor_x = 0
 				dirty = true
 			case 23: // CTRL-W
-				for i := len(c.input) - 1; i >= 0; i-- {
-					if i == 0 || c.input[i] == ' ' || c.input[i] == '\t' {
-						c.input = append(c.input[:i], c.input[c.cursor_x:]...)
-						c.cursor_x = i
-						dirty = true
-						break
-					}
+				var ok bool
+				c.input, c.cursor_x, ok = deleteWordBeforeCursor(c.input, c.cursor_x)
+				if ok {
+					dirty = true
 				}
 			default:
 				tmp := []rune{}
