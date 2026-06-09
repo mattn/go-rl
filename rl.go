@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sync/atomic"
 )
 
 type Rl struct {
@@ -108,14 +109,18 @@ func (r *Rl) readLine(passwordInput bool) (string, error) {
 	}
 	defer c.tearDown()
 
-	quit := false
+	var quit int32
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, os.Interrupt)
 	defer signal.Stop(sc)
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
-		<-sc
-		c.input = nil
-		quit = true
+		select {
+		case <-sc:
+			atomic.StoreInt32(&quit, 1)
+		case <-done:
+		}
 	}()
 
 	passwordRune := rune(0)
@@ -125,7 +130,7 @@ func (r *Rl) readLine(passwordInput bool) (string, error) {
 
 	dirty := true
 loop:
-	for !quit {
+	for atomic.LoadInt32(&quit) == 0 {
 		if err := c.redraw(dirty, passwordRune); err != nil {
 			return "", err
 		}
@@ -200,6 +205,9 @@ loop:
 	}
 
 	os.Stdout.WriteString("\n")
+	if atomic.LoadInt32(&quit) != 0 {
+		return "", nil
+	}
 	return string(c.input), nil
 }
 
