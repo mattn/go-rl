@@ -307,7 +307,11 @@ func (c *ctx) redraw(dirty bool, passwordChar rune) error {
 			cursor.x = oldpos.x + short(col)
 			cursor.y = oldpos.y + short(row)
 			var w uint32
-			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(r), uintptr(rw), uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&w)))
+			// Write the rune once. The console automatically reserves the
+			// trailing cell for full-width characters, so filling rw cells
+			// would draw the glyph twice (visible on the last character,
+			// since later characters overwrite the stray trailing copy).
+			r1, _, err = procFillConsoleOutputCharacter.Call(c.out, uintptr(r), uintptr(1), uintptr(*(*int32)(unsafe.Pointer(&cursor))), uintptr(unsafe.Pointer(&w)))
 			if r1 == 0 {
 				return err
 			}
