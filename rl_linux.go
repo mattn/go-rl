@@ -1,8 +1,9 @@
+//go:build linux
+// +build linux
+
 package rl
 
-import (
-	"syscall"
-)
+import "golang.org/x/sys/unix"
 
-const TCGETS = syscall.TCGETS
-const TCSETS = syscall.TCSETS
+const TCGETS = unix.TCGETS
+const TCSETS = unix.TCSETS

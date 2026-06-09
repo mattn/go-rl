@@ -6,18 +6,18 @@ package rl
 import (
 	"bytes"
 	"fmt"
-	"github.com/mattn/go-runewidth"
 	"io"
 	"os"
-	"syscall"
 	"unicode/utf8"
-	"unsafe"
+
+	"github.com/mattn/go-runewidth"
+	"golang.org/x/sys/unix"
 )
 
 type ctx struct {
 	in       uintptr
 	out      uintptr
-	st       syscall.Termios
+	st       unix.Termios
 	input    []rune
 	last     []rune
 	prompt   string
@@ -30,7 +30,7 @@ type ctx struct {
 
 func (c *ctx) readRunes() ([]rune, error) {
 	var buf [16]byte
-	n, err := syscall.Read(int(c.in), buf[:])
+	n, err := unix.Read(int(c.in), buf[:])
 	if err != nil {
 		return nil, err
 	}
@@ -68,11 +68,17 @@ func decodeRunes(buf []byte) ([]rune, []byte) {
 	return rs, nil
 }
 
-type winsize struct {
-	Row    uint16
-	Col    uint16
-	Xpixel uint16
-	Ypixel uint16
+func ioctlGetTermios(fd uintptr, req uint, st *unix.Termios) error {
+	termios, err := unix.IoctlGetTermios(int(fd), req)
+	if err != nil {
+		return err
+	}
+	*st = *termios
+	return nil
+}
+
+func ioctlSetTermios(fd uintptr, req uint, st *unix.Termios) error {
+	return unix.IoctlSetTermios(int(fd), req, st)
 }
 
 func newCtx(prompt string) (*ctx, error) {
@@ -80,24 +86,24 @@ func newCtx(prompt string) (*ctx, error) {
 
 	c.in = os.Stdin.Fd()
 
-	var st syscall.Termios
-	if _, _, err := syscall.Syscall6(syscall.SYS_IOCTL, c.in, uintptr(TCGETS), uintptr(unsafe.Pointer(&st)), 0, 0, 0); err != 0 {
+	var st unix.Termios
+	if err := ioctlGetTermios(c.in, uint(TCGETS), &st); err != nil {
 		return nil, err
 	}
 
 	c.st = st
 
-	st.Iflag &^= syscall.ISTRIP | syscall.INLCR | syscall.ICRNL | syscall.IGNCR | syscall.IXON | syscall.IXOFF
-	st.Lflag &^= syscall.ECHO | syscall.ICANON | syscall.ISIG
-	if _, _, err := syscall.Syscall6(syscall.SYS_IOCTL, c.in, uintptr(TCSETS), uintptr(unsafe.Pointer(&st)), 0, 0, 0); err != 0 {
+	st.Iflag &^= unix.ISTRIP | unix.INLCR | unix.ICRNL | unix.IGNCR | unix.IXON | unix.IXOFF
+	st.Lflag &^= unix.ECHO | unix.ICANON | unix.ISIG
+	if err := ioctlSetTermios(c.in, uint(TCSETS), &st); err != nil {
 		return nil, err
 	}
 
 	c.prompt = prompt
 	c.input = []rune{}
 
-	var ws winsize
-	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdin), uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(&ws))); err != 0 {
+	ws, err := unix.IoctlGetWinsize(int(c.in), unix.TIOCGWINSZ)
+	if err != nil {
 		return nil, err
 	}
 	c.size = int(ws.Col)
@@ -105,7 +111,7 @@ func newCtx(prompt string) (*ctx, error) {
 }
 
 func (c *ctx) tearDown() {
-	syscall.Syscall6(syscall.SYS_IOCTL, c.in, uintptr(TCSETS), uintptr(unsafe.Pointer(&c.st)), 0, 0, 0)
+	ioctlSetTermios(c.in, uint(TCSETS), &c.st)
 }
 
 func (c *ctx) redraw(dirty bool, passwordChar rune) error {
